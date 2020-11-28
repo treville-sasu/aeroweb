@@ -7,76 +7,84 @@ import XmlJS from "xml-js";
 // Rédacteur: Sylvie Guidotti
 // Mise à jour: Nadège Martin
 
-export default class Aeroweb {
+export default class {
   constructor(key, options) {
     this.options = {
-      baseURL: this.constructor.baseURL,
-      url: this.constructor.pathname,
+      baseURL: "https://aviation.meteo.fr",
+      url: "FR/aviation/serveur_donnees.jsp",
       login: key,
       ...options
     };
   }
 
-  OPMET(codes, options) {
-    return this.request(
+  async OPMET(codes, options) {
+    const data = await this.aerofetch(
       "OPMET2",
       {
         LIEUID: codes.join("|")
       },
       options
-    ).then(data => {
-      return data.root ? this.sanitizeStations(data.root.opmet) : [];
-    });
+    );
+    return data.root ? this.sanitizeStations(data.root.opmet) : [];
   }
-  SIGMET(codes, options) {
-    return this.request(
+
+  async SIGMET(codes, options) {
+    const data = await this.aerofetch(
       "SIGMET2",
       {
         LIEUID: codes.join("|")
       },
       options
-    ).then(data => {
-      return data.root ? this.sanitizeStations(data.root.FIR) : [];
-    });
+    );
+    return data.root ? this.sanitizeStations(data.root.FIR) : [];
   }
-  VAA(codes, options) {
-    return this.request(
+
+  async VAA(codes, options) {
+    const data = await this.aerofetch(
       "VAA",
       {
         LIEUID: codes.join("|")
       },
       options
-    ).then(this.groupByMessage);
+    )
+    return this.groupByMessage(data);
   }
-  VAG(codes, options) {
-    return this.request(
+
+  async VAG(codes, options) {
+    const data = await this.aerofetch(
       "VAG",
       {
         LIEUID: codes.join("|")
       },
       options
-    ).then(this.flattenMaps);
+    )
+    return this.flattenMaps(data);
   }
-  TCA(codes, options) {
-    return this.request(
+
+  async TCA(codes, options) {
+    const data = await this.aerofetch(
       "TCA",
       {
         LIEUID: codes.join("|")
       },
       options
-    ).then(this.groupByMessage);
+    )
+    return this.groupByMessage(data);
   }
-  TCAG(codes, options) {
-    return this.request(
+
+  async TCAG(codes, options) {
+    const data = this.aerofetch(
       "TCAG",
       {
         LIEUID: codes.join("|")
       },
       options
-    ).then(this.flattenMaps);
+    )
+    return this.flattenMaps(data);
   }
-  MAA(codes, options) {
-    return this.request(
+
+  async MAA(codes, options) {
+    return await this.aerofetch(
       "MAA",
       {
         LIEUID: codes.join("|")
@@ -84,8 +92,9 @@ export default class Aeroweb {
       options
     );
   }
-  PREDEC(codes, options) {
-    return this.request(
+
+  async PREDEC(codes, options) {
+    return await this.aerofetch(
       "PREDEC",
       {
         LIEUID: codes.join("|")
@@ -93,7 +102,8 @@ export default class Aeroweb {
       options
     );
   }
-  CARTES(zone, type, alt, options) {
+
+  async CARTES(zone, type, alt, options) {
     let params = {};
     if (!zone && !type && !alt) params.BASE_COMPLETE = "oui";
     else {
@@ -102,10 +112,12 @@ export default class Aeroweb {
       if (alt) params.ALTITUDE = alt;
     }
 
-    return this.request("CARTES", params, options).then(this.flattenMaps);
+    const data = await this.aerofetch("CARTES", params, options)
+    return this.flattenMaps(data);
   }
-  DOSSIER(destination, options) {
-    return this.request(
+
+  async DOSSIER(destination, options) {
+    return await this.aerofetch(
       "DOSSIER",
       {
         DESTINATION: destination
@@ -113,18 +125,19 @@ export default class Aeroweb {
       options
     );
   }
-  SW(options) {
-    return this.request("SW", {}, options);
-  }
-  VALIDATION(code) {
-    return this.request("VALIDATION", {
-      CODE_METEO: code
-    }).then(data => {
-      console.debug(data); return (data.validation.resultat == "OK" ? true : false)
-    });
+
+  async SW(options) {
+    return await this.aerofetch("SW", {}, options);
   }
 
-  request(type, params, options) {
+  async VALIDATION(code) {
+    const data = await this.aerofetch("VALIDATION", {
+      CODE_METEO: code
+    });
+    return (data.validation.resultat == "OK" ? true : false);
+  }
+
+  async aerofetch(type, params, options) {
     let url = new URL(this.options.url, this.options.baseURL);
 
     url.search = new URLSearchParams({
@@ -135,25 +148,24 @@ export default class Aeroweb {
 
     if (this.options.cors_proxy) url = this.options.cors_proxy(url);
 
-    return (
-      fetch(url, options)
-        .then(response => response.text())
-        .then(this.parser)
-        .then(data => {
-          if (data.ERREUR) return {};
-          if (data.acces && data.acces.code)
-            throw new Error("Aeroweb: login unknown");
-          return data;
-        })
-        .then(Aeroweb.sanitizeAttributes)
-    );
+    const response = await fetch(url, options)
+    if (!response.ok)
+      throw { code: response.status, message: response.statusText };
+    else {
+      const text = await response.text();
+      const data = this.parser(text);
+      if (data.ERREUR) return {};
+      if (data.acces && data.acces.code)
+        throw new Error("Aeroweb: login unknown");
+      return this.sanitizeAttributes.call(this, data);
+    }
   }
 
   parser(data) {
     return XmlJS.xml2js(data, { compact: true, ignoreDeclaration: true });
   }
 
-  static sanitizeAttributes(data) {
+  sanitizeAttributes(data) {
     for (const property in data) {
       if (data[property]._attributes) {
         data[property] = { ...data[property], ...data[property]._attributes };
@@ -161,12 +173,12 @@ export default class Aeroweb {
       }
       if (data[property]._text) data[property] = data[property]._text;
       if (data[property]._cdata) data[property] = data[property]._cdata;
-      if (property == "lien") data[property] = this.baseURL + data[property];
+      if (property == "lien") data[property] = this.options.baseURL + data[property];
       if (
         data[property] &&
         (typeof data[property] === "object" || Array.isArray(data[property]))
       )
-        Aeroweb.sanitizeAttributes(data[property]);
+        this.sanitizeAttributes(data[property]);
     }
     return data;
   }
@@ -188,7 +200,7 @@ export default class Aeroweb {
     return [data.groupe.messages].flat().map(function (station) {
       return {
         ...{ oaci: station.oaci, nom: station.nom },
-        ...AeroWeb.groupBy([station.message].flat(), "type", m => m.texte)
+        ...this.groupBy([station.message].flat(), "type", m => m.texte)
       };
     });
   }
@@ -201,17 +213,18 @@ export default class Aeroweb {
       .filter(Boolean);
   }
 
-  // Utility fonctions gessing constants from API request.
+  // Utility fonctions gessing constants from API aerofetch.
   extractZones(data) {
     return data.cartes.bloc_zone.map(bz => {
       return { id: bz.idz, name: bz.nom };
     });
   }
+
   extractMaps(data) {
-    let zones = AeroWeb.groupBy(data.cartes.bloc_zone, "idz", bz => bz.carte);
+    let zones = this.groupBy(data.cartes.bloc_zone, "idz", bz => bz.carte);
     for (const property in zones) {
       zones[property] = zones[property].flat();
-      zones[property] = AeroWeb.groupBy(zones[property], "type", c => c.niveau);
+      zones[property] = this.groupBy(zones[property], "type", c => c.niveau);
       for (const type in zones[property]) {
         zones[property][type] = [...new Set(zones[property][type])];
       }
@@ -219,19 +232,11 @@ export default class Aeroweb {
     return zones;
   }
 
-  static groupBy(xs, key, callback) {
+  groupBy(xs, key, callback) {
     return xs.reduce(function (rv, x) {
       if (x) (rv[x[key]] = rv[x[key]] || []).push(callback.call(null, x));
       return rv;
     }, {});
-  }
-
-  // Constants used when building a request
-  static get baseURL() {
-    return "https://aviation.meteo.fr";
-  }
-  static get pathname() {
-    return "FR/aviation/serveur_donnees.jsp";
   }
 
   static get VAA() {

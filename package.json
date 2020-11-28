@@ -2,11 +2,12 @@
   "name": "aeroweb",
   "version": "0.9.0",
   "description": "Client for Aeroweb API (Meteo France)",
+  "author": "Elmatou",
   "main": "dist/main.js",
   "module": "src/index.js",
-  "author": "Elmatou",
   "license": "MIT",
   "private": false,
+  "repository": "git@github.com:treville-sasu/aeroweb.git",
   "scripts": {
     "build": "yarn run webpack",
     "lint": "yarn run eslint --fix",

@@ -1,6 +1,6 @@
 {
   "name": "aeroweb",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Client for Aeroweb API (Meteo France)",
   "author": "Elmatou",
   "main": "dist/main.js",

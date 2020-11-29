@@ -7,25 +7,33 @@ offer JSON content, directly from MétéoFrance Server
 
 # Installation
 
-`yarn as aeroweb` or `npm install aeroweb`
+`yarn add aeroweb` or `npm install aeroweb`
 
-Currently not hosted on any CDN.
+or in web browser
+`<script src="https://cdn.jsdelivr.net/npm/aeroweb@0.9.0/dist/main.min.js"></script>`
 
 # Usage
 First of all, you'll need an api key from Meteo France. Then you'll be able to make request to the server.
 
-
 the lib rely on a XML parser to work. It is shipped with `xml-js` but can be changer with the `parser` property.
+
+Create a new instance with two argumets.
+* first is the api key
+* second is an option object :
+  * `url` : would be the base URL of all request (could be a String or an URL).
+  * `prefetch` is a function used to alter the request before fetch. if needed. It receive a request and should return a request.
+  * `parser` a function wich will parse XML string and return a javascript object, it is called synchronously.
 
 ## Methods
 
 With the API key Meteo France will give you documentation to there API, I will, only give you the liste of implemented methods.
 
-there are basicly two sets of requests. Those returning messages (METAR, SIGMET, ...) and those returning Weather Charts (WINTEM, TEMSI)
-
 methods are : 
-`OPMET, SIGMET, VAA, VAG, TCA, TCAG, MAA, PREDEC, CARTES, DOSSIER, SW, VALIDATION`
+`OPMET, SIGMET, VAA,  TCA, MAA, PREDEC, SW` returning bulletins (collection of messages)
+`TCAG, VAG, CARTES` returning charts.
+`VALIDATION, DOSSIER` user management.
 
+Quick refernce : If you want METAR or TAF messages use `OPMET`
 
 ## Example
 
@@ -109,5 +117,10 @@ They are populated with data in MeteoFrance documentation.
 Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at https://aviation.meteo.fr/FR/aviation/serveur_donnees.jsp?ID=API_KEY&TYPE_DONNEES=VALIDATION&CODE_METEO=SomeUser. (Reason: CORS header ‘Access-Control-Allow-Origin’ missing).
 ```
 
-Aeroweb server responses will not set `Access-Control-Allow-Origin` header, preventing you from using it directly from browser.
+Aeroweb server will not set `Access-Control-Allow-Origin` header, preventing you from using it directly from browser.
 You'll need some sort of Proxy, or ServiceWorker to add this header.
+
+for exemple, using a proxy :
+```js
+let aero = new Aeroweb("API_KEY", {prefetch: (request) => new Request("https://cors-anywhere.herokuapp.com/" + request.url, request); })
+```

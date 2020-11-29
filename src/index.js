@@ -9,101 +9,75 @@ import XmlJS from "xml-js";
 
 export default class {
   constructor(key, options) {
-    this.options = {
-      baseURL: "https://aviation.meteo.fr",
-      url: "FR/aviation/serveur_donnees.jsp",
-      login: key,
-      ...options
-    };
+    this.key = key;
+    this.url = options.url || new URL("FR/aviation/serveur_donnees.jsp", "https://aviation.meteo.fr");
+    this.prefetch = options.prefetch
+    this.parser = options.parser || ((data) => { return XmlJS.xml2js(data, { compact: true, ignoreDeclaration: true }); })
   }
 
-  async OPMET(codes, options) {
+  async OPMET(codes) {
     const data = await this.aerofetch(
       "OPMET2",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     );
     return data.root ? this.sanitizeStations(data.root.opmet) : [];
   }
 
-  async SIGMET(codes, options) {
+  async SIGMET(codes) {
     const data = await this.aerofetch(
       "SIGMET2",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     );
     return data.root ? this.sanitizeStations(data.root.FIR) : [];
   }
 
-  async VAA(codes, options) {
+  async VAA(codes) {
     const data = await this.aerofetch(
       "VAA",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     )
     return this.groupByMessage(data);
   }
 
-  async VAG(codes, options) {
+  async VAG(codes) {
     const data = await this.aerofetch(
       "VAG",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     )
     return this.flattenMaps(data);
   }
 
-  async TCA(codes, options) {
+  async TCA(codes) {
     const data = await this.aerofetch(
       "TCA",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     )
     return this.groupByMessage(data);
   }
 
-  async TCAG(codes, options) {
+  async TCAG(codes) {
     const data = this.aerofetch(
       "TCAG",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     )
     return this.flattenMaps(data);
   }
 
-  async MAA(codes, options) {
+  async MAA(codes) {
     return await this.aerofetch(
       "MAA",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     );
   }
 
-  async PREDEC(codes, options) {
+  async PREDEC(codes) {
     return await this.aerofetch(
       "PREDEC",
-      {
-        LIEUID: codes.join("|")
-      },
-      options
+      this.prepareCodes(codes),
     );
   }
 
-  async CARTES(zone, type, alt, options) {
+  async CARTES(zone, type, alt) {
     let params = {};
     if (!zone && !type && !alt) params.BASE_COMPLETE = "oui";
     else {
@@ -112,22 +86,21 @@ export default class {
       if (alt) params.ALTITUDE = alt;
     }
 
-    const data = await this.aerofetch("CARTES", params, options)
+    const data = await this.aerofetch("CARTES", params)
     return this.flattenMaps(data);
   }
 
-  async DOSSIER(destination, options) {
+  async DOSSIER(destination) {
     return await this.aerofetch(
       "DOSSIER",
       {
         DESTINATION: destination
       },
-      options
     );
   }
 
-  async SW(options) {
-    return await this.aerofetch("SW", {}, options);
+  async SW() {
+    return await this.aerofetch("SW", {});
   }
 
   async VALIDATION(code) {
@@ -137,18 +110,18 @@ export default class {
     return (data.validation.resultat == "OK" ? true : false);
   }
 
-  async aerofetch(type, params, options) {
-    let url = new URL(this.options.url, this.options.baseURL);
+  async aerofetch(type, params) {
+    let url = new URL(this.url);
 
     url.search = new URLSearchParams({
-      ID: this.options.login,
+      ID: this.key,
       TYPE_DONNEES: type,
       ...params
     });
+    let request = new Request(url)
+    if (this.prefetch) request = this.prefetch(request)
 
-    if (this.options.cors_proxy) url = this.options.cors_proxy(url);
-
-    const response = await fetch(url, options)
+    const response = await fetch(request)
     if (!response.ok)
       throw { code: response.status, message: response.statusText };
     else {
@@ -161,8 +134,10 @@ export default class {
     }
   }
 
-  parser(data) {
-    return XmlJS.xml2js(data, { compact: true, ignoreDeclaration: true });
+  prepareCodes(codes) {
+    return {
+      LIEUID: codes.join("|")
+    }
   }
 
   sanitizeAttributes(data) {
@@ -173,7 +148,7 @@ export default class {
       }
       if (data[property]._text) data[property] = data[property]._text;
       if (data[property]._cdata) data[property] = data[property]._cdata;
-      if (property == "lien") data[property] = this.options.baseURL + data[property];
+      if (property == "lien") data[property] = new URL(data[property], this.url);
       if (
         data[property] &&
         (typeof data[property] === "object" || Array.isArray(data[property]))

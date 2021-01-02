@@ -8,7 +8,7 @@ import XmlJS from "xml-js";
 // Mise à jour: Nadège Martin
 
 export default class {
-  constructor(key, options) {
+  constructor(key, options = {}) {
     this.key = key;
     this.url = options.url || new URL("FR/aviation/serveur_donnees.jsp", "https://aviation.meteo.fr");
     this.prefetch = options.prefetch
